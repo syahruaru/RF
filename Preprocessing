@@ -1,0 +1,549 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import json
+import openbcilib as ob
+import os
+
+from scipy.io import savemat, loadmat
+from scipy.signal import butter,lfilter
+
+
+# In[2]:
+
+
+# Deklarasi variabel utama
+emg_record_dir = '../recordings/'      # alamat folder utama
+
+subj_codes = []
+sess_codes = []
+fs = 1600
+
+
+# In[3]:
+
+
+# Deklarasi pewaktuan setiap sesi
+s1_dur = [5,3,2,5,3,2,5,5,3,2,5,3,2,5]
+s1_act = ['r','pp','gs','r','ps','gp','r','r','pp','gs','r','ps','gp','r']
+
+s2_dur = [5,3,2,5,3,2,5,5,3,2,5,3,2,5]
+s2_act = ['r','pp','gs','r','ps','gp','r','r','pp','gs','r','ps','gp','r']
+
+s3_dur = [10,3,2,10,3,2,10,10,3,2,10,3,2,10]
+s3_act = ['r','pp','gs','r','ps','gp','r','r','pp','gs','r','ps','gp','r']
+
+
+# In[4]:
+
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur,'act':s1_act}
+sess_time['S2'] = {'dur':s2_dur,'act':s2_act}
+sess_time['S3'] = {'dur':s3_dur,'act':s3_act}
+
+
+# ## Baca Data
+
+# In[5]:
+
+
+# Membuat dictionary subject files
+subj_files_rec = ob.make_subj_files(emg_record_dir,subj_codes=subj_codes,sess_codes=sess_codes)
+print('daftar subjek:',subj_files_rec['subjects'])
+print('daftar session:',subj_files_rec['sessions'])
+
+
+# In[6]:
+
+
+# Koreksi seluruh berkas secara otomatis
+emg_corr_dir = '../emg_corrected/'
+subj_files_corrected = ob.make_subj_files(emg_corr_dir)
+subj_files_corrected['main_dir'] = emg_corr_dir
+
+
+# In[7]:
+
+
+# Cek struktur direktori
+sfr_json = json.dumps(subj_files_rec,indent=4)
+print(sfr_json)
+
+
+# In[8]:
+
+
+print('Subjek :', subj_codes)
+print('Sesi :', sess_codes)
+
+
+# In[9]:
+
+
+# Baca data dalam format pd
+subj_files = subj_files_corrected
+subject = subj_codes[0] # ['BY', 'FA', 'IA', 'MI', 'MT', 'RF', 'RM', 'RS', 'SR', 'YA']
+session = sess_codes[0] # [Sesi1 = 0, Sesi2 = 1, Sesi3 = 2]
+day = 0     # [BY=0, FA=6 IA=3, MI=1, MT=5, RF=5, RM=2, RS=2, SR=0, YA=4]
+trial = 0
+emg_pd = ob.read_file(subj_files=subj_files,subject=subject,session=session,day=day,trial=trial)
+
+
+# In[10]:
+
+
+# Konversi data ke numpy, board ganglion
+emg_np = ob.pd_to_numpy(emg_pd)
+N = emg_np.shape[1]
+
+
+# In[11]:
+
+
+print('subjek:',subject)
+print('sesi:',session)
+print('trial:',trial)
+ts = 1.8
+print(ob.plot_marking_session(emg_np,sess_time=sess_time,session=session,time_start=ts,fs=fs))
+
+
+# In[ ]:
+
+
+# j = json.dumps(ts_json, indent = 4)
+# with open("mytrialstart4NOV_.json", "w") as f:
+#     f.write(j)
+#     f.close()
+#     #print(j)
+
+
+# ## FILTER
+
+# In[16]:
+
+
+folder = '../mat_files/1/'
+fs = 1600
+
+for i in range(len(subj_codes)):   #subject
+    subject = subj_codes[i]
+    
+    if subject == 'BY' or subject == 'SR':
+        day = 0
+    elif subject == 'MI':
+        day = 1
+    elif subject == 'RM' or subject == 'RS':
+        day = 2
+    elif subject == 'IA':
+        day = 3
+    elif subject == 'YA':
+        day = 4
+    elif subject == 'MT' or subject == 'RF':
+        day = 5
+    elif subject == 'FA':
+        day = 6
+    
+    for j in range (len(sess_codes)):   #session
+        session = sess_codes[j]
+        sess_day = session+'-'+f'{day:02d}'
+        
+        for k in range(3):   #trial
+            trial = k
+            
+            emg_pd = ob.read_file(subj_files=subj_files,subject=subject,session=session,day=day,trial=trial)
+            emg_np = ob.pd_to_numpy(emg_pd)
+            
+            bNot,aNot = butter(N=3,Wn=[47,53],btype='bandstop',fs=fs)
+            bBP,aBP = butter(N=3,Wn=[20,400],btype='bandpass',fs=fs)
+            
+            emg = lfilter(bNot,aNot,emg_np)
+            emg = lfilter(bBP,aBP,emg)
+            
+            emg_filtered = emg
+            
+            
+            
+            # Savemat
+#             femg_filtered = folder+subject+'-'+sess_day+'-'+str(trial)+'.mat' # filename emg_filtered
+#             demg_filtered = {'emg_filtered': emg_filtered, 'label': 'emg_filtered: emg yang sudah difilter'} # dictionary data emg_filtered
+#             savemat(femg_filtered, demg_filtered)
+
+
+# In[12]:
+
+
+fs = 1600
+bNot,aNot = butter(N=3,Wn=[47,53],btype='bandstop',fs=fs)
+bBP,aBP = butter(N=3,Wn=[20,400],btype='bandpass',fs=fs)
+emg = lfilter(bNot,aNot,emg_np)
+emg = lfilter(bBP,aBP,emg)
+
+
+# In[14]:
+
+
+bNot
+
+
+# In[15]:
+
+
+aNot
+
+
+# In[16]:
+
+
+bBP
+
+
+# In[17]:
+
+
+aBP
+
+
+# In[13]:
+
+
+print('subjek:',subject)
+print('sesi:',session)
+print('trial:',trial)
+print(ob.plot_marking_session(emg,sess_time=sess_time,session=session,time_start=ts,fs=fs))
+print(ts)
+
+
+# ## AMBIL GERAKAN SUPINASI DAN PRONASI
+
+# In[24]:
+
+
+# Opening JSON file
+f = open('mytrialstart4NOV.json',)
+ts_str = json.load(f)
+ts_dict = json.loads(ts_str)
+
+# Update dictionary trial start yang baru
+trial_starts = ts_dict
+
+
+# ## Supinasi 1
+
+# In[25]:
+
+
+folder = '../mat_files/1/'
+fs = 1600
+
+for file in os.listdir(folder):
+    emg_filtered = loadmat(folder+file)
+    emg = emg_filtered['emg_filtered']
+    
+    subject, session, day, trial = ob.file_info(file)
+    
+    if session == 'S1' or session == 'S2':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 8
+        
+        index = ts_gs1 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gs1 = emg[:, index_start:index_stop]
+        
+#         file = subject+'-'+sess_day+'-'+'S'+'-'+str(trial)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gs1 = {'emg_movement': emg_gs1, 'label':'emg_gs1: emg gerakan supinasi1'}
+#         savemat(filename, demg_gs1)
+        
+    elif session == 'S3':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 13
+        
+        index = ts_gs1 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gs1 = emg[:, index_start:index_stop]
+        
+#         file = subject+'-'+sess_day+'-'+'S'+'-'+str(trial)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gs1 = {'emg_movement': emg_gs1, 'label':'emg_gs1: emg gerakan supinasi1'}
+#         savemat(filename, demg_gs1)
+
+        
+print('potong gerakan selesai')
+
+
+# In[31]:
+
+
+s1_dur_ = [2]
+s1_act_ = ['gs1','r']
+
+s2_dur_ = [2]
+s2_act_ = ['gs1','r']
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S2'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S3'] = {'dur':s2_dur_,'act':s2_act_}
+
+
+print(ob.plot_marking_session(emg_gs1,sess_time=sess_time,session=session,time_start=0,fs=fs))
+
+
+# ## Pronasi 1
+
+# In[26]:
+
+
+folder = '../mat_files/1/'
+fs = 1600
+
+
+for file in os.listdir(folder):
+    emg_filtered = loadmat(folder+file)
+    emg = emg_filtered['emg_filtered']
+    
+    subject, session, day, trial = ob.file_info(file)
+    
+    if session == 'S1' or session == 'S2':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 8; ts_gp1 = ts_gs1+10; 
+        
+        index =  ts_gp1 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gp1 = emg[:, index_start:index_stop]
+#         file = subject+'-'+sess_day+'-'+'P'+'-'+str(trial)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gp1 = {'emg_movement': emg_gp1, 'label':'emg_gs1: emg gerakan pronasi'}
+#         savemat(filename, demg_gp1)
+        
+    elif session == 'S3':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 13; ts_gp1 = ts_gs1+15;
+        
+        index =  ts_gp1 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gp1 = emg[:, index_start:index_stop]
+        
+#         file = subject+'-'+sess_day+'-'+'P'+'-'+str(trial)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gp1 = {'emg_movement': emg_gp1, 'label':'emg_gp1: emg gerakan pronasi1'}
+#         savemat(filename, demg_gp1)
+
+        
+print('potong gerakan selesai')
+
+
+# In[32]:
+
+
+s1_dur_ = [2]
+s1_act_ = ['gs1','r']
+
+s2_dur_ = [2]
+s2_act_ = ['gs1','r']
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S2'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S3'] = {'dur':s2_dur_,'act':s2_act_}
+
+
+print(ob.plot_marking_session(emg_gp1,sess_time=sess_time,session=session,time_start=0,fs=fs))
+
+
+# ## Supinasi 2
+
+# In[27]:
+
+
+folder = '../mat_files/1/'
+fs = 1600
+
+
+for file in os.listdir(folder):
+    emg_filtered = loadmat(folder+file)
+    emg = emg_filtered['emg_filtered']
+    
+    subject, session, day, trial = ob.file_info(file)
+    
+    if session == 'S1' or session == 'S2':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 8; ts_gp1 = ts_gs1+10; ts_gs2 = ts_gp1+15;
+        
+        index = ts_gs2 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gs2 = emg[:, index_start:index_stop]
+#         file = subject+'-'+sess_day+'-'+'S'+'-'+str(trial+3)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gs2 = {'emg_movement': emg_gs2, 'label':'emg_gs2: emg gerakan supinasi2'}
+#         savemat(filename, demg_gs2)
+        
+    elif session == 'S3':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 13; ts_gp1 = ts_gs1+15; ts_gs2 = ts_gp1+25;
+        
+        index = ts_gs2 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gs2 = emg[:, index_start:index_stop]
+        
+#         file = subject+'-'+sess_day+'-'+'S'+'-'+str(trial+3)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gs2 = {'emg_movement': emg_gs2, 'label':'emg_gs2: emg gerakan supinasi2'}
+#         savemat(filename, demg_gs2)
+
+        
+print('potong gerakan selesai')
+
+
+# In[ ]:
+
+
+s1_dur_ = [2]
+s1_act_ = ['gs1','r']
+
+s2_dur_ = [2]
+s2_act_ = ['gs1','r']
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S2'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S3'] = {'dur':s2_dur_,'act':s2_act_}
+
+
+print(ob.plot_marking_session(emg_gs2,sess_time=sess_time,session=session,time_start=0,fs=fs))
+
+
+# ## Pronasi 2
+
+# In[28]:
+
+
+folder = '../mat_files/1/'
+fs = 1600
+
+
+for file in os.listdir(folder):
+    emg_filtered = loadmat(folder+file)
+    emg = emg_filtered['emg_filtered']
+    
+    subject, session, day, trial = ob.file_info(file)
+    
+    if session == 'S1' or session == 'S2':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 8; ts_gp1 = ts_gs1+10; ts_gs2 = ts_gp1+15; ts_gp2 = ts_gs2+10;
+        
+        index =  ts_gp2 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gp2 = emg[:, index_start:index_stop]
+#         file = subject+'-'+sess_day+'-'+'P'+'-'+str(trial+3)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gp2 = {'emg_movement': emg_gp2, 'label':'emg_gp2: emg gerakan pronasi2'}
+#         savemat(filename, demg_gp2)
+        
+    elif session == 'S3':
+        sess_day = session+'-'+f'{day:02d}'
+        ts = trial_starts[subject][sess_day][trial]
+        ts_gs1 = ts + 13; ts_gp1 = ts_gs1+15; ts_gs2 = ts_gp1+25; ts_gp2 = ts_gs2+15;
+        
+        index = ts_gp2 * fs
+        index_float = float(format(index, '2f'))
+        index_start = int(index_float)
+        index_stop = index_start +3200
+        
+        emg_gp2 = emg[:, index_start:index_stop]
+        
+#         file = subject+'-'+sess_day+'-'+'P'+'-'+str(trial+3)+'.mat'
+#         filename = '../mat_files/2/'+file
+#         demg_gp2 = {'emg_movement': emg_gp2, 'label':'emg_gp2: emg gerakan pronasi2'}
+#         savemat(filename, demg_gp2)
+
+        
+print('potong gerakan selesai')
+
+
+# In[33]:
+
+
+s1_dur_ = [2]
+s1_act_ = ['gs1','r']
+
+s2_dur_ = [2]
+s2_act_ = ['gs1','r']
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S2'] = {'dur':s1_dur_,'act':s1_act_}
+sess_time['S3'] = {'dur':s2_dur_,'act':s2_act_}
+
+
+print(ob.plot_marking_session(emg_gp2,sess_time=sess_time,session=session,time_start=0,fs=fs))
+
+
+# In[21]:
+
+
+s1_dur_coba = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+s1_act_coba = ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10']
+
+
+# Membuat dictionary sesi
+sess_time = {}
+sess_time['S1'] = {'dur':s1_dur_coba,'act':s1_act_coba}
+sess_time['S2'] = {'dur':s1_dur_coba,'act':s1_act_coba}
+sess_time['S3'] = {'dur':s1_dur_coba,'act':s1_act_coba}
+
+
+print('subjek :',subject)
+print('sesi   :',session)
+print('trial  :',trial)
+print('trial start :', ts_gs1)
+print(type(s1_dur_coba))
+print(ob.plot_marking_session(emg_gs1,sess_time=sess_time,session=session,time_start=0,fs=fs))
+
+
+# In[ ]:
+
+
+
+
+
